@@ -1,0 +1,7 @@
+{
+  "name": "100% True On-Chain Web3 - Solana AI NFT Marketplace & Creator Engine",
+  "description": "Securely stake, mint, and withdraw with 100% true on-chain Web3 consensus finality, powered by verified program PDA contracts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
