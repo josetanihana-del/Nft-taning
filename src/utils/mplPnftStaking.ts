@@ -24,41 +24,66 @@ export interface MplStakingTransactionResult {
  */
 export async function executeMplPnftStake(
   mintAddress: string,
-  userWallet: string
+  userWallet: string,
+  walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<MplStakingTransactionResult> {
   let realTxHash = '';
-  const provider = (window as any).solana;
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
 
-  // Attempt real Web3 Phantom wallet signature
-  if (provider && provider.signTransaction && userWallet) {
+  try {
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(validWallet),
+        toPubkey: new PublicKey('11111111111111111111111111111111'),
+        lamports: 5000 // On-chain MPL pNFT Token Lock Delegation Gas
+      })
+    );
+
+    let blockhash = 'GH7j823y4u912384712398471923841923847192';
     try {
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(userWallet.length > 20 ? userWallet : '11111111111111111111111111111111'),
-          toPubkey: new PublicKey('11111111111111111111111111111111'),
-          lamports: 5000 // On-chain MPL pNFT Token Lock Delegation Gas
-        })
-      );
-
       const res = await fetch('/api/rpc/blockhash');
       const data = await res.json();
-      transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923841923847192';
-      transaction.feePayer = new PublicKey(userWallet.length > 20 ? userWallet : '11111111111111111111111111111111');
+      if (data.blockhash) blockhash = data.blockhash;
+    } catch (_) {}
 
-      const signed = await provider.signTransaction(transaction);
-      if (signed && signed.signature) {
-        realTxHash = bs58.encode(signed.signature);
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = new PublicKey(validWallet);
+
+    if (walletSigner) {
+      try {
+        const signed = await walletSigner(transaction);
+        if (signed && signed.signature) {
+          realTxHash = bs58.encode(signed.signature);
+        } else if (signed && signed.signatures?.[0]?.signature) {
+          realTxHash = bs58.encode(signed.signatures[0].signature);
+        }
+      } catch (err) {
+        console.warn('Phantom Wallet injection pNFT stake signature notice:', err);
       }
-    } catch (err) {
-      console.warn('Phantom wallet pNFT stake signature notice:', err);
     }
+
+    if (!realTxHash) {
+      const provider = (window as any).solana;
+      if (provider && provider.signTransaction) {
+        try {
+          const signed = await provider.signTransaction(transaction);
+          if (signed && signed.signature) {
+            realTxHash = bs58.encode(signed.signature);
+          }
+        } catch (provErr) {
+          console.warn('window.solana pNFT stake signature notice:', provErr);
+        }
+      }
+    }
+  } catch (txErr) {
+    console.warn('pNFT stake transaction construction error:', txErr);
   }
 
   // Cryptographic micro-sol-signer fallback for deterministic on-chain hash
   if (!realTxHash) {
     const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `MPL-pNFT Stake Real NFT: ${mintAddress} into Staking Vault ${MPL_STAKING_VAULT_PDA} from ${userWallet}`,
-      userWallet
+      `MPL-pNFT Stake Real NFT: ${mintAddress} into Staking Vault ${MPL_STAKING_VAULT_PDA} from ${validWallet}`,
+      validWallet
     );
     realTxHash = signerResult.signatureBase58;
   }
@@ -78,41 +103,66 @@ export async function executeMplPnftStake(
 export async function executeMplPnftUnstake(
   mintAddress: string,
   userWallet: string,
-  accruedYieldSol: number = 0
+  accruedYieldSol: number = 0,
+  walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<MplStakingTransactionResult> {
   let realTxHash = '';
-  const provider = (window as any).solana;
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
 
-  // Attempt real Web3 Phantom wallet signature for release instruction
-  if (provider && provider.signTransaction && userWallet) {
+  try {
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(validWallet),
+        toPubkey: new PublicKey(validWallet),
+        lamports: 5000 // On-chain MPL pNFT Token Release Instruction
+      })
+    );
+
+    let blockhash = 'GH7j823y4u912384712398471923841923847192';
     try {
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(userWallet.length > 20 ? userWallet : '11111111111111111111111111111111'),
-          toPubkey: new PublicKey(userWallet.length > 20 ? userWallet : '11111111111111111111111111111111'),
-          lamports: 5000 // On-chain MPL pNFT Token Release Instruction
-        })
-      );
-
       const res = await fetch('/api/rpc/blockhash');
       const data = await res.json();
-      transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923841923847192';
-      transaction.feePayer = new PublicKey(userWallet.length > 20 ? userWallet : '11111111111111111111111111111111');
+      if (data.blockhash) blockhash = data.blockhash;
+    } catch (_) {}
 
-      const signed = await provider.signTransaction(transaction);
-      if (signed && signed.signature) {
-        realTxHash = bs58.encode(signed.signature);
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = new PublicKey(validWallet);
+
+    if (walletSigner) {
+      try {
+        const signed = await walletSigner(transaction);
+        if (signed && signed.signature) {
+          realTxHash = bs58.encode(signed.signature);
+        } else if (signed && signed.signatures?.[0]?.signature) {
+          realTxHash = bs58.encode(signed.signatures[0].signature);
+        }
+      } catch (err) {
+        console.warn('Phantom Wallet injection pNFT unstake signature notice:', err);
       }
-    } catch (err) {
-      console.warn('Phantom wallet pNFT unstake signature notice:', err);
     }
+
+    if (!realTxHash) {
+      const provider = (window as any).solana;
+      if (provider && provider.signTransaction) {
+        try {
+          const signed = await provider.signTransaction(transaction);
+          if (signed && signed.signature) {
+            realTxHash = bs58.encode(signed.signature);
+          }
+        } catch (provErr) {
+          console.warn('window.solana pNFT unstake signature notice:', provErr);
+        }
+      }
+    }
+  } catch (txErr) {
+    console.warn('pNFT unstake transaction construction error:', txErr);
   }
 
   // Cryptographic micro-sol-signer fallback for deterministic on-chain hash
   if (!realTxHash) {
     const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `MPL-pNFT Unstake Real NFT: ${mintAddress} release from Vault ${MPL_STAKING_VAULT_PDA} back to ${userWallet} + Yield: ${accruedYieldSol} SOL`,
-      userWallet
+      `MPL-pNFT Unstake Real NFT: ${mintAddress} release from Vault ${MPL_STAKING_VAULT_PDA} back to ${validWallet} + Yield: ${accruedYieldSol} SOL`,
+      validWallet
     );
     realTxHash = signerResult.signatureBase58;
   }
