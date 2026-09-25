@@ -426,234 +426,6 @@ export default function App() {
     }
   };
 
-  const handleToggleStake = async (nftId: string) => {
-    const targetNft = nfts.find(n => n.id === nftId);
-    if (!targetNft) return;
-
-    if (!ensureWalletConnected(targetNft.staked ? 'unstake NFT' : 'stake NFT')) {
-      return;
-    }
-
-    try {
-      const { executeCrabustStake, executeCrabustUnstake, calculateCrabustAccruedYield } = await import('./utils/crabustNftStaking');
-
-      if (targetNft.staked) {
-        // UNSTAKING REAL NFT on-chain
-        showToast('Initiating on-chain unstake in connected Solana wallet...');
-        const secondsStaked = targetNft.stakedAt ? (Date.now() - targetNft.stakedAt) / 1000 : 0;
-        const accruedYield = calculateCrabustAccruedYield(targetNft.price, secondsStaked);
-
-        const unstakeRes = await executeCrabustUnstake(
-          targetNft.mintAddress || targetNft.id,
-          walletAddress || 'WalletConnected',
-          accruedYield,
-          targetNft.price,
-          signTransaction
-        );
-
-        const res = await fetch(`/api/nfts/${nftId}/stake`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await res.json();
-        if (data.success) {
-          setNfts(nfts.map(n => n.id === nftId ? data.nft : n));
-          if (selectedNft?.id === nftId) setSelectedNft(data.nft);
-          if (accruedYield > 0) {
-            setSolBalance(prev => prev + accruedYield);
-          }
-          showToast(`Unstaked NFT on-chain! Accrued rewards credited (Tx: ${unstakeRes.txHash.slice(0, 8)}...) 🚀`);
-        }
-      } else {
-        // STAKING REAL NFT on-chain
-        showToast('Initiating on-chain stake in connected Solana wallet...');
-        const stakeRes = await executeCrabustStake(
-          targetNft.mintAddress || targetNft.id,
-          walletAddress || 'WalletConnected',
-          targetNft.price,
-          signTransaction
-        );
-
-        const res = await fetch(`/api/nfts/${nftId}/stake`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await res.json();
-        if (data.success) {
-          setNfts(nfts.map(n => n.id === nftId ? data.nft : n));
-          if (selectedNft?.id === nftId) setSelectedNft(data.nft);
-          showToast(`NFT Staked in On-Chain Escrow PDA! (Tx: ${stakeRes.txHash.slice(0, 8)}...) ⚡`);
-        }
-      }
-    } catch (err: any) {
-      showToast(`Staking transaction note: ${err.message || 'Action executed'}`);
-    }
-  };
-
-  const handleClaimYield = async (nftId: string) => {
-    const targetNft = nfts.find(n => n.id === nftId);
-    if (!targetNft) return;
-
-    if (!ensureWalletConnected('claim staking yield')) {
-      return;
-    }
-
-    try {
-      showToast('Initiating reward claim in connected Solana wallet...');
-      const { executeCrabustClaimRewards, calculateCrabustAccruedYield } = await import('./utils/crabustNftStaking');
-
-      const secondsStaked = targetNft.stakedAt ? (Date.now() - targetNft.stakedAt) / 1000 : 0;
-      const pendingYield = calculateCrabustAccruedYield(targetNft.price, secondsStaked) + (targetNft.earningsEarned || 0);
-
-      const claimRes = await executeCrabustClaimRewards(
-        targetNft.mintAddress || targetNft.id,
-        walletAddress || 'WalletConnected',
-        pendingYield,
-        targetNft.price,
-        signTransaction
-      );
-
-      const res = await fetch(`/api/nfts/${nftId}/claim-yield`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSolBalance(prev => prev + data.claimedAmount);
-        setNfts(nfts.map(n => n.id === nftId ? data.nft : n));
-        if (selectedNft?.id === nftId) setSelectedNft(data.nft);
-        showToast(`Successfully claimed +${data.claimedAmount.toFixed(4)} SOL on-chain! Tx: ${claimRes.txHash.slice(0, 8)}... 🚀`);
-      } else {
-        showToast(data.error || 'Failed to claim yield');
-      }
-    } catch (err: any) {
-      showToast(`Claim transaction note: ${err.message || 'Cancelled'}`);
-    }
-  };
-
-  const handleDepositPrincipal = async (nftId: string) => {
-    if (!ensureWalletConnected('deposit SOL into staking yield base')) {
-      return;
-    }
-
-    const amountStr = prompt('Enter SOL amount to deposit into your Solana Staking Vault:', '0.065');
-    if (!amountStr) return;
-    const amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount <= 0) {
-      showToast('Please enter a valid deposit amount.');
-      return;
-    }
-
-    try {
-      showToast('Initiating on-chain deposit in connected Solana wallet...');
-      const { PublicKey, Transaction, TransactionInstruction } = await import('@solana/web3.js');
-      const provider = (window as any).solana;
-      const SPL_MEMO_PROGRAM = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-
-      const transaction = new Transaction().add(
-        new TransactionInstruction({
-          keys: [{ pubkey: new PublicKey(walletAddress), isSigner: true, isWritable: false }],
-          programId: SPL_MEMO_PROGRAM,
-          data: Buffer.from(`DEPOSIT_PRINCIPAL:nft=${nftId}:amount=${amount}:user=${walletAddress}`)
-        })
-      );
-      transaction.recentBlockhash = await fetchSolanaBlockhash();
-      transaction.feePayer = new PublicKey(walletAddress);
-
-      if (signTransaction) {
-        try {
-          await signTransaction(transaction);
-        } catch (sErr) {
-          console.warn('Wallet adapter deposit signing note:', sErr);
-        }
-      } else if (provider?.signAndSendTransaction) {
-        await provider.signAndSendTransaction(transaction);
-      } else if (provider?.signTransaction) {
-        await provider.signTransaction(transaction);
-      }
-
-      const res = await fetch(`/api/nfts/${nftId}/deposit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSolBalance(prev => Math.max(0, prev - amount));
-        setNfts(nfts.map(n => n.id === nftId ? data.nft : n));
-        if (selectedNft?.id === nftId) setSelectedNft(data.nft);
-        showToast(`Successfully deposited ${amount} SOL on-chain into Solana Staking Vault! 🚀`);
-      } else {
-        showToast(data.error || 'Deposit failed');
-      }
-    } catch (err: any) {
-      showToast(`Deposit transaction note: ${err.message || 'Error'}`);
-    }
-  };
-
-  const handleWithdrawNft = async (nftId: string) => {
-    if (!ensureWalletConnected('unstake and withdraw NFT')) {
-      return;
-    }
-    const targetAddress = prompt('Enter recipient Solana wallet address to withdraw NFT out of wallet (Phantom Mobile / External Wallet):', walletAddress);
-    if (!targetAddress) return;
-
-    const nft = nfts.find(n => n.id === nftId);
-
-    try {
-      showToast('Initiating on-chain withdrawal in connected Solana wallet...');
-      let withdrawTxHash = '';
-      const { PublicKey, Transaction, TransactionInstruction } = await import('@solana/web3.js');
-      const provider = (window as any).solana;
-      const SPL_MEMO_PROGRAM = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
-
-      const transaction = new Transaction().add(
-        new TransactionInstruction({
-          keys: [{ pubkey: new PublicKey(walletAddress), isSigner: true, isWritable: false }],
-          programId: SPL_MEMO_PROGRAM,
-          data: Buffer.from(`WITHDRAW_NFT:nft=${nftId}:to=${targetAddress}:user=${walletAddress}`)
-        })
-      );
-      transaction.recentBlockhash = await fetchSolanaBlockhash();
-      transaction.feePayer = new PublicKey(walletAddress);
-
-      if (signTransaction) {
-        try {
-          const signed = await signTransaction(transaction);
-          if (signed && signed.signature) {
-            withdrawTxHash = bs58.encode(signed.signature);
-          } else if (signed && signed.signatures?.[0]?.signature) {
-            withdrawTxHash = bs58.encode(signed.signatures[0].signature);
-          }
-        } catch (txErr) {
-          console.warn('Wallet adapter withdrawal signature note:', txErr);
-        }
-      } else if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            withdrawTxHash = bs58.encode(signed.signature);
-          }
-        } catch (txErr) {
-          console.warn('Withdrawal tx signature note:', txErr);
-        }
-      }
-
-      if (!withdrawTxHash) {
-        withdrawTxHash = bs58.encode(new Uint8Array(64).fill(0).map((_, idx) => (idx * 11 + 19) % 256));
-      }
-
-      if (nft) {
-        nft.owner = targetAddress;
-        nft.txHash = withdrawTxHash;
-        setNfts([...nfts]);
-        if (selectedNft?.id === nftId) setSelectedNft(null);
-        showToast(`Successfully withdrawn NFT "${nft.title}" to ${targetAddress.slice(0, 6)}... (Tx: ${withdrawTxHash.slice(0, 8)}...) 🚀`);
-      }
-    } catch (err: any) {
-      showToast(`Withdrawal note: ${err.message || 'Cancelled'}`);
-    }
-  };
 
   const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -807,7 +579,7 @@ export default function App() {
               onClick={() => setActiveTab('mint')}
               className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 text-white shadow-lg shadow-purple-500/25"
             >
-              <Zap className="w-4 h-4 text-yellow-300" /> StakeIt Web3 Suite (AI Studio • Real DeFi Staking • Contract Vault • Portfolio)
+              <Zap className="w-4 h-4 text-yellow-300" /> Solana AI Mint Studio (AI Studio • Contract Vault • Portfolio)
             </button>
           </nav>
 
@@ -825,7 +597,7 @@ export default function App() {
       {/* Mobile Subheader Nav */}
       <div className="md:hidden flex flex-col gap-2 px-4 py-3 bg-[#121526] border-b border-purple-900/30">
         <button onClick={() => setActiveTab('mint')} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center gap-1.5 w-full justify-center">
-          <Zap className="w-3.5 h-3.5 text-yellow-300" /> StakeIt Web3 Suite
+          <Zap className="w-3.5 h-3.5 text-yellow-300" /> Solana AI Mint Studio
         </button>
         <Web3ConnectButton className="w-full" />
       </div>
@@ -852,7 +624,7 @@ export default function App() {
                   <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></div>
                   <div>
                     <div className="text-sm font-bold text-white font-mono flex items-center gap-2">
-                      <span>Sarah - Live Staking Accounts Representative</span>
+                      <span>Sarah - Live AI Minting Assistant</span>
                       <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-md border border-cyan-500/30 font-mono">
                         {walletConnected ? `MINT ADDR: ${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'DISCONNECTED'}
                       </span>
@@ -945,64 +717,10 @@ export default function App() {
                       </div>
                       
                       {/* Direct Deposit Transaction Button Prompt inside Chat */}
-                      {depositAmountVal !== null && !isUser && (
-                        <div className="pt-1 flex justify-start pl-1">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (!ensureWalletConnected(`deposit ${depositAmountVal} SOL`)) {
-                                return;
-                              }
-                              try {
-                                showToast(`Initiating on-chain deposit of ${depositAmountVal} SOL in wallet...`);
-                                const { executeContractDeposit } = await import('./utils/solanaVaultContract');
-                                const res = await executeContractDeposit(walletAddress, depositAmountVal, signTransaction);
-                                if (res.success) {
-                                  setSolBalance(prev => Math.max(0, prev - depositAmountVal));
-                                  fetchVaultLogs();
-                                  setChatMessages(prev => [...prev, { sender: 'ai', text: `✅ [DEPOSIT SUCCESS] Successfully executed a secure on-chain transaction of ${depositAmountVal} SOL directly into the Staking Vault Program (Tx: ${res.txHash.slice(0, 10)}...)! 🚀 Your staking rewards are actively compounding.` }]);
-                                  showToast(`Deposited ${depositAmountVal} SOL to Vault! 🚀`);
-                                }
-                              } catch (err: any) {
-                                showToast(`Deposit error: ${err.message}`);
-                              }
-                            }}
-                            className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:opacity-90 text-xs font-black font-mono px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-500/15 animate-bounce transition-all cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-slate-950" /> Deposit Staking: {depositAmountVal} SOL
-                          </button>
-                        </div>
-                      )}
-
+                      
                       {/* Direct Withdrawal Transaction Button Prompt inside Chat */}
-                      {withdrawAmountVal !== null && !isUser && (
-                        <div className="pt-1 flex justify-start pl-1">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (!ensureWalletConnected(`withdraw ${withdrawAmountVal} SOL`)) {
-                                return;
-                              }
-                              try {
-                                showToast(`Initiating on-chain withdrawal of ${withdrawAmountVal} SOL in wallet...`);
-                                const { executeContractWithdraw } = await import('./utils/solanaVaultContract');
-                                const res = await executeContractWithdraw(walletAddress, walletAddress, withdrawAmountVal, signTransaction);
-                                if (res.success) {
-                                  setSolBalance(prev => prev + withdrawAmountVal);
-                                  fetchVaultLogs();
-                                  setChatMessages(prev => [...prev, { sender: 'ai', text: `✅ [WITHDRAWAL SUCCESS] Successfully released ${withdrawAmountVal} SOL from the audited Vault PDA directly back to your Phantom Wallet (Tx: ${res.txHash.slice(0, 10)}...)! 🚀` }]);
-                                  showToast(`Withdrawn ${withdrawAmountVal} SOL! 🚀`);
-                                }
-                              } catch (err: any) {
-                                showToast(`Withdrawal error: ${err.message}`);
-                              }
-                            }}
-                            className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:opacity-90 text-xs font-black font-mono px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-500/15 animate-bounce transition-all cursor-pointer"
-                          >
-                            <ArrowUpRight className="w-3.5 h-3.5" /> Withdraw: {withdrawAmountVal} SOL
-                          </button>
-                        </div>
-                      )}
+
+                      {/* Withdrawal functionality removed */}
 
                       {suggestedConcept && !isUser && (
                         <div className="pt-1 flex justify-start pl-1">
@@ -1146,14 +864,6 @@ export default function App() {
                   const isMintCommand = lowerInput.includes('mint') || lowerInput.includes('create') || lowerInput.includes('generate') || lowerInput.includes('make nft');
 
                   if (isMintCommand) {
-                    const hasDeposit = nfts.some(n => n.staked || (n.depositedPrincipal || 0) > 0);
-                    if (!hasDeposit) {
-                      showToast('Please deposit $10 USD / 0.065 SOL injection into the Vault before minting!');
-                      setChatMessages(prev => [...prev, { sender: 'ai', text: '⚠️ Minting requires a $10 USD / 0.065 SOL deposit in the Staking Vault. Please make a deposit under the Staking section first to activate your account!' }]);
-                      setActiveTab('staking');
-                      return;
-                    }
-
                     setIsGenerating(true);
                     try {
                       const { Connection, PublicKey, Transaction, SystemProgram } = await import('@solana/web3.js');
@@ -1190,7 +900,7 @@ export default function App() {
                       const data = await res.json();
                       if (data.success) {
                         setNfts([data.nft, ...nfts]);
-                        setChatMessages(prev => [...prev, { sender: 'ai', text: `🎨 Successfully generated and minted real Solana NFT "${data.nft.title}" directly to your wallet (${walletAddress.slice(0, 6)}...)! 🚀 Ready for 10,000,000% Base ROI on-chain staking.` }]);
+                        setChatMessages(prev => [...prev, { sender: 'ai', text: `🎨 Successfully generated and minted real Solana NFT "${data.nft.title}" directly to your wallet (${walletAddress.slice(0, 6)}...)! 🚀` }]);
                         showToast(`Successfully minted "${data.nft.title}" to your wallet! 🚀`);
                       } else {
                         setChatMessages(prev => [...prev, { sender: 'ai', text: `Minting failed: ${data.error}` }]);
@@ -1587,16 +1297,6 @@ export default function App() {
                         <div>
                           <div className="text-[10px] text-slate-500 font-mono">ROYALTY EARNED</div>
                           <div className="text-sm font-bold text-emerald-400 font-mono">+{nft.earningsEarned.toFixed(2)} SOL</div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleWithdrawNft(nft.id); }}
-                            className="bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 px-3 py-2 rounded-xl text-xs font-bold transition-all"
-                            title="Withdraw / Transfer NFT out of wallet via Phantom Mobile"
-                          >
-                            Withdraw
-                          </button>
-
                         </div>
                       </div>
                     </div>
