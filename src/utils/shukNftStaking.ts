@@ -72,13 +72,13 @@ export function calculateShukAccruedRewards(
   const elapsedSeconds = Math.max(0, (now - startTime) / 1000);
   const elapsedHours = elapsedSeconds / 3600;
 
-  // 10,000,000% Base ROI Hourly Distribution: (Floor Price * 100,000) / 8,760 SOL/hr
-  const hourlyRateSol = (nftPriceSol * 100000) / 8760;
+  // Estimated ~7.5% APY Hourly Staking Emission: (Price * 0.075) / 8,760 SOL/hr
+  const hourlyRateSol = (nftPriceSol * 0.075) / 8760;
   const accruedSol = parseFloat((elapsedHours * hourlyRateSol).toFixed(6));
 
   return {
     accruedSol,
-    hourlyRateSol: parseFloat(hourlyRateSol.toFixed(4)),
+    hourlyRateSol: parseFloat(hourlyRateSol.toFixed(6)),
     elapsedHours: parseFloat(elapsedHours.toFixed(2))
   };
 }

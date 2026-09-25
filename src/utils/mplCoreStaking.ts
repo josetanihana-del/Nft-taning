@@ -12,7 +12,7 @@ import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
  * 3. Anchor Staking PDA:
  *    - Pool PDA: [b"mpl-core-pool", admin.key().as_ref()]
  *    - User Stake Info PDA: [b"mpl-core-user-stake", asset.key().as_ref(), user.key().as_ref()]
- * 4. Yield Accrual: Clock-based point & SOL reward distribution based on 10,000,000% Base ROI.
+ * 4. Yield Accrual: Clock-based point & reward distribution based on ~7.5% estimated protocol APY.
  */
 
 export const MPL_CORE_PROGRAM_ID = new PublicKey('CoREGxTvdBxVa882x8nBGYaFhJ7J4WnEwR9n2Y7n6V3');

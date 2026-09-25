@@ -13,12 +13,11 @@ import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
  * Solana Mainnet NFT Staking Protocol
  * Based on https://github.com/crabust/NFT-Staking-Solana/tree/main
  * 
- * MODIFICATION: Modified from original Devnet Solana to Mainnet Solana (Mainnet-Beta).
- * Guarantees:
- * 1. ZERO change to person's SOL: Staking and unstaking do NOT deduct or move the user's personal SOL balance.
- * 2. Unmoved SOL Price: The NFT's valuation and SOL floor price are rock-solid and never fluctuate or drop.
- * 3. Continuous Interest: NFT stakers continuously earn 10,000,000% APR real hourly yield on their assets.
- * 4. Phantom Wallet Injection: Full integration with @anza-xyz/wallet-adapter (Official Solana) for seamless signing.
+ * Features:
+ * 1. Non-Custodial PDA Architecture: Program-derived addresses hold assets without centralized control.
+ * 2. Transparent Protocol Yield: Realistic Solana protocol reward distribution (~7.5% estimated annual APY).
+ * 3. Phantom & Anza Wallet Adapter: Full integration with @anza-xyz/wallet-adapter (Official Solana) for seamless signing.
+ * 4. Transparent Economics: Staking yields are variable protocol rewards; crypto assets are subject to market volatility.
  */
 
 // Solana Mainnet Configuration
@@ -33,15 +32,14 @@ export const CRABUST_ESCROW_VAULT_SEED = 'crabust-nft-escrow-vault';
 export const CRABUST_MAINNET_VAULT_PDA = 'CrabStkMainnetPDA11111111111111111111111111';
 
 // Web3 Solana Mainnet NFT Staking Protocol
-// Base 10,000,000% ROI Real Staking Rules & Hourly Yield
-export const CRABUST_REAL_APY_PERCENT = 10000000; // 10,000,000% Base ROI APR
-export const CRABUST_ANNUAL_MULTIPLIER = 100000; // 100,000x annual yield multiplier
+// Estimated ~7.5% APY Protocol Staking Emission Rate
+export const CRABUST_REAL_APY_PERCENT = 7.5; // ~7.5% Estimated Staking APY
 export const SECONDS_PER_YEAR = 365 * 24 * 3600;
 export const HOURS_PER_YEAR = 365 * 24; // 8760 hours
 
 /**
- * Calculates genuine on-chain hourly earning rate in SOL based on 10,000,000% Base ROI.
- * Formula: (Price * (APY / 100)) / 8,760 SOL per hour = (Price * 100,000) / 8,760 SOL/hr
+ * Calculates estimated on-chain hourly earning rate in reward/SOL based on ~7.5% APY.
+ * Formula: (Price * (APY / 100)) / 8,760 hours per year
  */
 export function calculateCrabustHourlyYield(priceSol: number, apyPercent: number = CRABUST_REAL_APY_PERCENT): number {
   if (!priceSol || priceSol <= 0) return 0;
@@ -49,7 +47,7 @@ export function calculateCrabustHourlyYield(priceSol: number, apyPercent: number
 }
 
 /**
- * Calculates real-time accrued rewards based on elapsed seconds and 10,000,000% Base ROI.
+ * Calculates estimated accrued rewards based on elapsed seconds and ~7.5% APY.
  * Formula: (Price * (APY / 100) * secondsStaked) / (365 * 24 * 3600)
  */
 export function calculateCrabustAccruedYield(priceSol: number, secondsStaked: number, apyPercent: number = CRABUST_REAL_APY_PERCENT): number {
@@ -171,7 +169,7 @@ export async function executeCrabustStake(
   // 3. Fallback deterministic cryptographic micro-sol-signer
   if (!realTxHash) {
     const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `crabust/NFT-Staking-Solana Mainnet NFT Stake: ${mintAddress} into Escrow Vault ${CRABUST_MAINNET_VAULT_PDA} from ${validWallet} at fixed 10,000,000% APR`,
+      `crabust/NFT-Staking-Solana Mainnet NFT Stake: ${mintAddress} into Escrow Vault ${CRABUST_MAINNET_VAULT_PDA} from ${validWallet} at estimated ~7.5% APY`,
       validWallet
     );
     realTxHash = signerResult.signatureBase58;
@@ -191,7 +189,7 @@ export async function executeCrabustStake(
 
 /**
  * Execute real Web3 Solana NFT Unstaking on Mainnet according to crabust/NFT-Staking-Solana protocol.
- * Releases NFT token back to user wallet & settles accrued 10,000,000% APR rewards.
+ * Releases NFT token back to user wallet & settles accrued rewards.
  * Supports injected Anza Wallet Adapter (signTransaction).
  */
 export async function executeCrabustUnstake(

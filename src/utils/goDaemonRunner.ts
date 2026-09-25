@@ -36,7 +36,7 @@ class GoStakingDaemonService {
     // Initial emission calculation for $10 USD (0.054 SOL)
     const { hourlyRateSol } = calculateSolgovHourlyEmission(0.054, 1);
     this.log(`⚡ $10 USD Deposit (0.0540 SOL) -> Hourly Staking Emission: +${hourlyRateSol} SOL/hr`);
-    this.log(`📈 Protocol Reward Rate: 10,000,000% Base ROI Real Compound Yield`);
+    this.log(`📈 Protocol Reward Rate: Estimated ~7.5% APY Staking Emission`);
     this.log('📡 Listening for Solgov Distributor snapshot epochs...');
 
     // Refresh blockhash periodically

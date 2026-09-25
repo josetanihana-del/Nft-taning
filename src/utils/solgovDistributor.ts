@@ -52,11 +52,11 @@ export function calculateSolgovHourlyEmission(
   nftPriceSol: number = 0.054, // $10 USD equivalent
   stakedHours: number = 1
 ): { hourlyRateSol: number; accruedYieldSol: number } {
-  // 10,000,000% Base ROI Hourly Distribution: (Price * 100,000) / 8,760 SOL per hour
-  const hourlyRateSol = (nftPriceSol * 100000) / 8760;
+  // Protocol Estimated APY Hourly Distribution (~7.5% APY): (Price * 0.075) / 8,760 SOL per hour
+  const hourlyRateSol = (nftPriceSol * 0.075) / 8760;
   const accruedYieldSol = hourlyRateSol * stakedHours;
   return {
-    hourlyRateSol: parseFloat(hourlyRateSol.toFixed(4)),
+    hourlyRateSol: parseFloat(hourlyRateSol.toFixed(6)),
     accruedYieldSol: parseFloat(accruedYieldSol.toFixed(6))
   };
 }

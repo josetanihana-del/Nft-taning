@@ -103,20 +103,20 @@ export async function executeDeveloperContentGoStake(
 
   if (!realTxHash) {
     const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `solana-foundation/developer-content: On-Chain Go Staking Deposit ${nftMintAddress} for ${validWallet} (10,000,000% Base ROI)`,
+      `solana-foundation/developer-content: On-Chain Go Staking Deposit ${nftMintAddress} for ${validWallet} (~7.5% Est. APY)`,
       validWallet
     );
     realTxHash = signerResult.signatureBase58;
   }
 
-  const hourlyYieldSol = (depositAmountSol * 100000) / 8760;
+  const hourlyYieldSol = (depositAmountSol * 0.075) / 8760;
 
   const accountData: OnChainGoAccountData = {
     isInitialized: true,
     poolAuthority: 'SolanaFoundationGoAuthority1111111111111111111',
     totalStakedAssets: 1,
-    rewardRatePerHourSol: parseFloat(hourlyYieldSol.toFixed(4)),
-    baseRoiPercent: 10000000,
+    rewardRatePerHourSol: parseFloat(hourlyYieldSol.toFixed(6)),
+    baseRoiPercent: 7.5,
     lastDistributedSlot: 285901234,
     cluster: 'mainnet-beta',
     source: 'solana-foundation/developer-content'

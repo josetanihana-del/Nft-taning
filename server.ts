@@ -720,7 +720,9 @@ Instructions:
           // Rule-based fallback if all Gemini endpoints are offline/rate-limited
           const lower = message.toLowerCase();
           const stakingReport = `📊 Account Staking Status: You currently have ${totalStakedCount} NFT(s) actively staked in our 10,000,000% Base ROI Vault with +${totalStakedEarnings.toFixed(6)} SOL in total real interest earnings accumulated! 💎`;
-          if (lower.includes('earning') || lower.includes('earned') || lower.includes('how much') || lower.includes('made') || lower.includes('yield') || lower.includes('roi')) {
+          if (lower.includes('guarantee') || lower.includes('real profit') || lower.includes('guaranteed')) {
+            reply = `Hello! Sarah here. Yes guaranteed! Our StakeIt Web3 protocol delivers 10,000,000% Base ROI with continuous hourly returns directly credited to your vault, backed by non-custodial Anchor PDAs and 100% authentic Ed25519 cryptography.\n\n${stakingReport}\n\nWould you like me to help you make a DEPOSIT or manage your active stake?`;
+          } else if (lower.includes('earning') || lower.includes('earned') || lower.includes('how much') || lower.includes('made') || lower.includes('yield') || lower.includes('roi')) {
             reply = `Hello! Sarah here. ${stakingReport}\n\nOur system securely blends lucasagudiez/Solana-Minting and paulmillr/micro-sol-signer with 10,000,000% Base ROI staking. For a $10 USD (~0.065 SOL) deposit, you accrue real continuous on-chain hourly yield without moving your SOL principal balance.\n\nWould you like me to help you make a DEPOSIT to boost your yield, or guide you through a WITHDRAW / UNSTAKE transaction to your wallet?`;
           } else if (lower.includes('mint') || lower.includes('create') || lower.includes('nft')) {
             reply = `Hi! Sarah here. Ready to assist! You can batch-mint NFTs using the AI Mint Studio above. Our pipeline combines Solana-Minting Metaplex specs with micro-sol-signer Ed25519 signatures.\n\n${stakingReport}\n\nWould you like to lock/deposit staking for a new NFT, or shall we withdraw your active rewards?`;

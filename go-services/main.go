@@ -23,7 +23,7 @@ const (
 	FreeholdProgramID    = "FreeHoLd1111111111111111111111111111111111"
 	SolgovDistributorPDA = "SolGovDistVaultPDA1111111111111111111111111"
 	MplCoreProgramID     = "CoREGxTvdBxVa882x8nBGYaFhJ7J4WnEwR9n2Y7n6V3"
-	BaseROIHourlyAPR     = 10000000.0 // 10,000,000% Base ROI
+	BaseROIHourlyAPR     = 7.5 // ~7.5% Estimated APY
 	HoursPerYear         = 8760.0
 )
 
@@ -70,10 +70,10 @@ func NewStakingEngine(endpoint string) *StakingEngine {
 	}
 }
 
-// CalculateHourlyYieldSol computes exact hourly yield for 10,000,000% Base ROI
+// CalculateHourlyYieldSol computes estimated hourly yield for ~7.5% APY
 func (e *StakingEngine) CalculateHourlyYieldSol(priceSol float64) float64 {
-	// Formula: (Price * 100,000) / 8,760 hours
-	return (priceSol * 100000.0) / HoursPerYear
+	// Formula: (Price * 0.075) / 8,760 hours
+	return (priceSol * 0.075) / HoursPerYear
 }
 
 // RegisterStake registers a new staking deposit
@@ -177,10 +177,9 @@ func main() {
 	}
 
 	fmt.Printf("✅ Latest Mainnet Blockhash: %s\n", engine.latestHash)
-	fmt.Printf("⚡ $10 USD Deposit -> Hourly Staking Emission: +%.4f SOL/hr (+$%.2f/hr)\n", 
-		engine.CalculateHourlyYieldSol(depositSOL), 
-		engine.CalculateHourlyYieldSol(depositSOL)*solPriceUSD)
-	fmt.Printf("📈 Base ROI Rate: 10,000,000%% Real Compound Yield\n")
+	fmt.Printf("⚡ $10 USD Deposit -> Estimated Staking Emission: +%.6f SOL/hr\n", 
+		engine.CalculateHourlyYieldSol(depositSOL))
+	fmt.Printf("📈 Estimated Staking Rate: ~7.5%% APY (Protocol Emission)\n")
 
 	// Start Background Daemon Poller
 	ticker := time.NewTicker(10 * time.Second)
