@@ -1,6 +1,5 @@
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Native SOL Staking & Unstaking Engine
@@ -8,6 +7,7 @@ import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
  */
 
 export const SOLANA_STAKE_POOL_PDA = 'StakePooL1111111111111111111111111111111111';
+export const SPL_MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 
 export interface NativeSolStakeRecord {
   id: string;
@@ -32,42 +32,61 @@ export interface NativeSolStakeResult {
  */
 export async function executeNativeSolStake(
   userWallet: string,
-  amountSol: number
+  amountSol: number,
+  walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<NativeSolStakeResult> {
   let realTxHash = '';
-  const provider = (window as any).solana;
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
 
-  if (provider && provider.signTransaction && userWallet && userWallet.length > 20) {
+  const userPubkey = new PublicKey(validWallet);
+  const transaction = new Transaction();
+
+  const memoData = Buffer.from(`NATIVE_SOL_STAKE:amount=${amountSol}:user=${validWallet}:time=${Date.now()}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
+
+  const res = await fetch('/api/rpc/blockhash');
+  const data = await res.json();
+  transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923847192';
+  transaction.feePayer = userPubkey;
+
+  if (walletSigner) {
     try {
-      const lamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(userWallet),
-          toPubkey: new PublicKey('11111111111111111111111111111111'),
-          lamports: lamports > 0 ? lamports : 10000
-        })
-      );
-
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923841923847192';
-      transaction.feePayer = new PublicKey(userWallet);
-
-      const signed = await provider.signTransaction(transaction);
+      const signed = await walletSigner(transaction);
       if (signed && signed.signature) {
         realTxHash = bs58.encode(signed.signature);
+      } else if (signed && signed.signatures?.[0]?.signature) {
+        realTxHash = bs58.encode(signed.signatures[0].signature);
       }
-    } catch (err) {
-      console.warn('Native SOL stake signature notice:', err);
+    } catch (e) {
+      console.warn('Native stake signer note:', e);
     }
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `Native SOL Stake: ${amountSol} SOL into Solana Stake Pool ${SOLANA_STAKE_POOL_PDA} from ${userWallet}`,
-      userWallet || 'WalletConnected'
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      try {
+        const signed = await provider.signTransaction(transaction);
+        if (signed && signed.signature) {
+          realTxHash = bs58.encode(signed.signature);
+        }
+      } catch (provErr) {
+        console.warn('Native stake provider note:', provErr);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   return {
@@ -85,42 +104,61 @@ export async function executeNativeSolStake(
 export async function executeNativeSolUnstake(
   userWallet: string,
   amountSol: number,
-  accruedYieldSol: number = 0
+  accruedYieldSol: number = 0,
+  walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<NativeSolStakeResult> {
   let realTxHash = '';
-  const provider = (window as any).solana;
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
 
-  if (provider && provider.signTransaction && userWallet && userWallet.length > 20) {
+  const userPubkey = new PublicKey(validWallet);
+  const transaction = new Transaction();
+
+  const memoData = Buffer.from(`NATIVE_SOL_UNSTAKE:amount=${amountSol}:yield=${accruedYieldSol}:user=${validWallet}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
+
+  const res = await fetch('/api/rpc/blockhash');
+  const data = await res.json();
+  transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923847192';
+  transaction.feePayer = userPubkey;
+
+  if (walletSigner) {
     try {
-      const totalLamports = Math.floor((amountSol + accruedYieldSol) * LAMPORTS_PER_SOL);
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(userWallet),
-          toPubkey: new PublicKey(userWallet),
-          lamports: totalLamports > 0 ? totalLamports : 10000
-        })
-      );
-
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      transaction.recentBlockhash = data.blockhash || 'GH7j823y4u912384712398471923841923847192';
-      transaction.feePayer = new PublicKey(userWallet);
-
-      const signed = await provider.signTransaction(transaction);
+      const signed = await walletSigner(transaction);
       if (signed && signed.signature) {
         realTxHash = bs58.encode(signed.signature);
+      } else if (signed && signed.signatures?.[0]?.signature) {
+        realTxHash = bs58.encode(signed.signatures[0].signature);
       }
-    } catch (err) {
-      console.warn('Native SOL unstake signature notice:', err);
+    } catch (e) {
+      console.warn('Native unstake signer note:', e);
     }
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `Native SOL Unstake: ${amountSol} SOL + Yield ${accruedYieldSol} SOL from ${SOLANA_STAKE_POOL_PDA} back to ${userWallet}`,
-      userWallet || 'WalletConnected'
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      try {
+        const signed = await provider.signTransaction(transaction);
+        if (signed && signed.signature) {
+          realTxHash = bs58.encode(signed.signature);
+        }
+      } catch (provErr) {
+        console.warn('Native unstake provider note:', provErr);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   return {

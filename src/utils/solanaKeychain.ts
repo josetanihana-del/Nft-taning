@@ -1,6 +1,5 @@
 import { Keypair, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Foundation Keychain Manager
@@ -62,31 +61,21 @@ export class SolanaKeychainManager {
     signerPubkey: string,
     messageContext: string = 'Solana Staking Yield Settlement'
   ): Promise<{ signature: string; verified: boolean }> {
-    const validWallet = signerPubkey && signerPubkey.length > 20 ? signerPubkey : 'KeyChainVaultPubkey1111111111111111111111';
+    const validWallet = signerPubkey && signerPubkey.length > 20 ? signerPubkey : '';
+    if (!validWallet) {
+      throw new Error('Please connect your Solana wallet.');
+    }
     
     // Attempt standard wallet provider first
     const provider = (window as any).solana;
     if (provider && provider.signTransaction) {
-      try {
-        const signed = await provider.signTransaction(tx);
-        if (signed && signed.signature) {
-          return { signature: bs58.encode(signed.signature), verified: true };
-        }
-      } catch (err) {
-        console.warn('Keychain provider notice:', err);
+      const signed = await provider.signTransaction(tx);
+      if (signed && signed.signature) {
+        return { signature: bs58.encode(signed.signature), verified: true };
       }
     }
 
-    // Micro Solana Signer fallback adhering to solana-keychain standard
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `solana-foundation/solana-keychain Authorized: ${messageContext} for ${validWallet}`,
-      validWallet
-    );
-
-    return {
-      signature: signerResult.signatureBase58,
-      verified: true
-    };
+    throw new Error('Wallet signature required.');
   }
 
   /**
@@ -98,3 +87,4 @@ export class SolanaKeychainManager {
 }
 
 export const solanaKeychain = new SolanaKeychainManager();
+

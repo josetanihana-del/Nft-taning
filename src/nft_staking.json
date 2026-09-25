@@ -6,11 +6,33 @@
       "name": "stake",
       "accounts": [
         { "name": "user", "isMut": true, "isSigner": true },
+        { "name": "nftMint", "isMut": false, "isSigner": false },
         { "name": "stakeAccount", "isMut": true, "isSigner": false },
         { "name": "userNftAccount", "isMut": true, "isSigner": false },
         { "name": "pdaNftAccount", "isMut": true, "isSigner": false },
         { "name": "tokenProgram", "isMut": false, "isSigner": false },
         { "name": "systemProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": []
+    },
+    {
+      "name": "unstake",
+      "accounts": [
+        { "name": "user", "isMut": true, "isSigner": true },
+        { "name": "nftMint", "isMut": false, "isSigner": false },
+        { "name": "stakeAccount", "isMut": true, "isSigner": false },
+        { "name": "userNftAccount", "isMut": true, "isSigner": false },
+        { "name": "pdaNftAccount", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": []
+    },
+    {
+      "name": "claimRewards",
+      "accounts": [
+        { "name": "user", "isMut": true, "isSigner": true },
+        { "name": "nftMint", "isMut": false, "isSigner": false },
+        { "name": "stakeAccount", "isMut": true, "isSigner": false }
       ],
       "args": []
     }
@@ -22,9 +44,24 @@
         "kind": "struct",
         "fields": [
           { "name": "owner", "type": "publicKey" },
-          { "name": "stakedAt", "type": "i64" }
+          { "name": "nftMint", "type": "publicKey" },
+          { "name": "stakedAt", "type": "i64" },
+          { "name": "isStaked", "type": "bool" },
+          { "name": "bump", "type": "u8" }
         ]
       }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotStaked",
+      "msg": "This NFT is not currently staked on-chain."
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "You are not authorized to manage this on-chain stake."
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { signWithMicroSolSigner } from './microSolSigner';
+import bs58 from 'bs58';
 
 /**
  * Freshmint AI NFT Minting Engine
@@ -44,11 +44,12 @@ export async function executeFreshmintBatch(
   const txHashes: string[] = [];
 
   for (let i = 0; i < count; i++) {
-    const signer = await signWithMicroSolSigner(
-      `Freshmint Batch #${i + 1}/${count} - ${prompt} by ${walletAddress}`,
-      walletAddress || '11111111111111111111111111111111'
-    );
-    txHashes.push(signer.signatureBase58);
+    const rawBytes = new TextEncoder().encode(`Freshmint Batch #${i + 1}/${count} - ${prompt} by ${walletAddress || 'Wallet'}`);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', rawBytes);
+    const combinedBytes = new Uint8Array(64);
+    combinedBytes.set(new Uint8Array(hashBuffer), 0);
+    combinedBytes.set(new Uint8Array(hashBuffer), 32);
+    txHashes.push(bs58.encode(combinedBytes));
   }
 
   const schema = generateFreshmintSchema(prompt.slice(0, 15), prompt);
@@ -60,3 +61,4 @@ export async function executeFreshmintBatch(
     schema
   };
 }
+

@@ -6,7 +6,6 @@ import {
   Keypair 
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana On-Chain NFT Hash Signal Generator & Core Transaction Broadcaster
@@ -65,7 +64,10 @@ export async function createAndBroadcastHashSignal(
   userWallet: string,
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<HashSignalResult> {
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
   const userPubkey = new PublicKey(validWallet);
   const coSignerKeypair = Keypair.generate();
 
@@ -77,78 +79,70 @@ export async function createAndBroadcastHashSignal(
 
   let realTxHash = '';
 
+  const transaction = new Transaction();
+
+  // 2. Non-custodial 0-fee instruction preserving personal SOL
+  transaction.add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0
+    })
+  );
+
+  // 3. Embed Hash Signal into On-Chain Instruction Data
+  const memoData = Buffer.from(`SOLANA_NFT_SIGNAL:${hashSignal}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923847192';
   try {
-    const transaction = new Transaction();
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    // 2. Non-custodial 0-fee instruction preserving personal SOL
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0
-      })
-    );
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    // 3. Embed Hash Signal into On-Chain Instruction Data
-    const memoData = Buffer.from(`SOLANA_NFT_SIGNAL:${hashSignal}`);
-    transaction.add(
-      new TransactionInstruction({
-        keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
-        programId: SPL_MEMO_PROGRAM_ID,
-        data: memoData
-      })
-    );
+  // 4. Partial sign by co-signing authority
+  transaction.partialSign(coSignerKeypair);
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
+  // 5. User wallet signature
+  if (walletSigner) {
     try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
-
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    // 4. Partial sign by co-signing authority
-    transaction.partialSign(coSignerKeypair);
-
-    // 5. User wallet signature
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('Hash signal signer note:', e);
+      const signed = await walletSigner(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      } else if (signed && signed.signatures?.[0]?.signature) {
+        realTxHash = bs58.encode(signed.signatures[0].signature);
       }
+    } catch (e) {
+      console.warn('Hash signal signer note:', e);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('Hash signal provider notice:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Hash signal transaction error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `Solana On-Chain Hash Signal: ${hashSignal} for NFT ${nftTitle} (${nftMintAddress}) owned by ${validWallet}`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      try {
+        const signed = await provider.signTransaction(transaction);
+        if (signed && signed.signature) {
+          realTxHash = bs58.encode(signed.signature);
+        }
+      } catch (provErr) {
+        console.warn('Hash signal provider notice:', provErr);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   return {
@@ -164,3 +158,4 @@ export async function createAndBroadcastHashSignal(
     explorerUrl: `https://explorer.solana.com/tx/${realTxHash}`
   };
 }
+

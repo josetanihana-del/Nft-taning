@@ -1,6 +1,5 @@
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Go SDK Integration

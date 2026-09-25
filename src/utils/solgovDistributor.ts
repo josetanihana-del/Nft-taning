@@ -1,6 +1,5 @@
 import { PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Laine Solgov Distributor Integration
@@ -71,64 +70,51 @@ export async function executeSolgovDistributorEnrollment(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<{ success: boolean; txHash: string; record: SolgovClaimRecord }> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
   const userPubkey = new PublicKey(validWallet);
 
+  const transaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0 // Non-custodial 0-fee instruction preserving personal SOL
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923841923847192';
   try {
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0 // Non-custodial 0-fee instruction preserving personal SOL
-      })
-    );
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
-    try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('Solgov signer note:', e);
-      }
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('Solgov window.solana notice:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Solgov enrollment error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `laine-sa/solgov-distributor Enroll NFT: ${nftMintAddress} for Hourly Staking Yield Distribution to ${validWallet}`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   const { hourlyRateSol } = calculateSolgovHourlyEmission(nftPriceSol, 1);
@@ -165,64 +151,51 @@ export async function executeSolgovDistributorClaim(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<{ success: boolean; txHash: string; claimedSol: number }> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
   const userPubkey = new PublicKey(validWallet);
 
+  const transaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923841923847192';
   try {
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0
-      })
-    );
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
-    try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('Solgov claim signer note:', e);
-      }
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('Solgov claim window.solana notice:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Solgov claim tx error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `laine-sa/solgov-distributor Claim Hourly Yield: ${claimAmountSol} SOL from ${SOLGOV_DISTRIBUTOR_VAULT_PDA} for ${validWallet}`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   return {

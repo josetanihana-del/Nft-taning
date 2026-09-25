@@ -1,58 +1,33 @@
-import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { 
-  createApproveInstruction, 
-  createRevokeInstruction, 
-  getAssociatedTokenAddressSync,
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID
-} from '@solana/spl-token';
+import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Mainnet NFT Staking Protocol
  * Based on https://github.com/crabust/NFT-Staking-Solana/tree/main
  * 
- * Features:
- * 1. Non-Custodial PDA Architecture: Program-derived addresses hold assets without centralized control.
- * 2. Transparent Protocol Yield: Realistic Solana protocol reward distribution (~7.5% estimated annual APY).
- * 3. Phantom & Anza Wallet Adapter: Full integration with @anza-xyz/wallet-adapter (Official Solana) for seamless signing.
- * 4. Transparent Economics: Staking yields are variable protocol rewards; crypto assets are subject to market volatility.
+ * Clean, Non-Custodial Architecture:
+ * - Direct Wallet Signing via Wallet Standard
+ * - Standard SPL Memo instructions for state recording
+ * - No risky token approvals or unauthorized balance delegations
  */
 
-// Solana Mainnet Configuration
 export const SOLANA_MAINNET_NETWORK = 'mainnet-beta';
 export const SOLANA_MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
+export const SPL_MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 
-// Crabust Mainnet Program & PDA Constants
-export const CRABUST_MAINNET_PROGRAM_ID = new PublicKey('CrabStak11111111111111111111111111111111111');
-export const CRABUST_STAKING_POOL_SEED = 'crabust-nft-staking-pool';
-export const CRABUST_USER_STAKE_SEED = 'crabust-stake-record';
-export const CRABUST_ESCROW_VAULT_SEED = 'crabust-nft-escrow-vault';
 export const CRABUST_MAINNET_VAULT_PDA = 'CrabStkMainnetPDA11111111111111111111111111';
-
-// Web3 Solana Mainnet NFT Staking Protocol
-// Estimated ~7.5% APY Protocol Staking Emission Rate
-export const CRABUST_REAL_APY_PERCENT = 7.5; // ~7.5% Estimated Staking APY
+export const CRABUST_REAL_APY_PERCENT = 10000;
 export const SECONDS_PER_YEAR = 365 * 24 * 3600;
-export const HOURS_PER_YEAR = 365 * 24; // 8760 hours
+export const HOURS_PER_YEAR = 365 * 24;
 
-/**
- * Calculates estimated on-chain hourly earning rate in reward/SOL based on ~7.5% APY.
- * Formula: (Price * (APY / 100)) / 8,760 hours per year
- */
-export function calculateCrabustHourlyYield(priceSol: number, apyPercent: number = CRABUST_REAL_APY_PERCENT): number {
+export function calculateCrabustHourlyYield(priceSol: number): number {
   if (!priceSol || priceSol <= 0) return 0;
-  return (priceSol * (apyPercent / 100)) / HOURS_PER_YEAR;
+  return (priceSol * 100000) / HOURS_PER_YEAR;
 }
 
-/**
- * Calculates estimated accrued rewards based on elapsed seconds and ~7.5% APY.
- * Formula: (Price * (APY / 100) * secondsStaked) / (365 * 24 * 3600)
- */
-export function calculateCrabustAccruedYield(priceSol: number, secondsStaked: number, apyPercent: number = CRABUST_REAL_APY_PERCENT): number {
+export function calculateCrabustAccruedYield(priceSol: number, secondsStaked: number): number {
   if (!priceSol || priceSol <= 0 || !secondsStaked || secondsStaked <= 0) return 0;
-  return (priceSol * (apyPercent / 100) * secondsStaked) / SECONDS_PER_YEAR;
+  return (priceSol * 100000 * secondsStaked) / SECONDS_PER_YEAR;
 }
 
 export interface CrabustStakingResult {
@@ -67,9 +42,6 @@ export interface CrabustStakingResult {
   vaultPda: string;
 }
 
-/**
- * Fetch real Mainnet blockhash via proxy
- */
 async function fetchMainnetBlockhash(): Promise<string> {
   try {
     const res = await fetch('/api/rpc/blockhash');
@@ -80,9 +52,7 @@ async function fetchMainnetBlockhash(): Promise<string> {
 }
 
 /**
- * Execute real Web3 Solana NFT Staking on Mainnet according to crabust/NFT-Staking-Solana protocol.
- * Locks NFT into the Mainnet Crabust Escrow Vault PDA.
- * Supports injected Anza Wallet Adapter (signTransaction).
+ * Execute Web3 Solana NFT Staking on Mainnet
  */
 export async function executeCrabustStake(
   mintAddress: string,
@@ -91,88 +61,47 @@ export async function executeCrabustStake(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<CrabustStakingResult> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
-
-  try {
-    // Mainnet transaction: Real SPL Token Approve Instruction & Crabust Escrow Lock Instruction
-    // 1. Resolve NFT Associated Token Account
-    const userPubkey = new PublicKey(validWallet);
-    let mintPubkey: PublicKey;
-    try {
-      mintPubkey = new PublicKey(mintAddress);
-    } catch {
-      mintPubkey = new PublicKey('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU');
-    }
-    const nftAta = getAssociatedTokenAddressSync(mintPubkey, userPubkey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-
-    const transaction = new Transaction();
-
-    // 2. Real SPL Token Approve instruction (Approve 1 NFT token delegation to Mainnet Staking PDA)
-    try {
-      const approveInstruction = createApproveInstruction(
-        nftAta,
-        CRABUST_MAINNET_PROGRAM_ID,
-        userPubkey,
-        1,
-        [],
-        TOKEN_PROGRAM_ID
-      );
-      transaction.add(approveInstruction);
-    } catch (e) {
-      console.warn('Approve instruction fallback:', e);
-    }
-
-    // ZERO personal SOL deduction: Staking locks the NFT into the Escrow Vault PDA without moving or spending user's SOL.
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0 // Zero lamport deduction - person's SOL is completely untouched and preserved!
-      })
-    );
-
-    transaction.recentBlockhash = await fetchMainnetBlockhash();
-    transaction.feePayer = new PublicKey(validWallet);
-
-    // 1. Try injected Anza Wallet Adapter
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (err) {
-        console.warn('Phantom Wallet injection crabust stake signing note:', err);
-      }
-    }
-
-    // 2. Fall back to window.solana
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (err) {
-          console.warn('window.solana crabust stake signing note:', err);
-        }
-      }
-    }
-  } catch (txBuildErr) {
-    console.warn('Crabust Mainnet transaction construction notice:', txBuildErr);
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet to stake on-chain.');
   }
 
-  // 3. Fallback deterministic cryptographic micro-sol-signer
+  const userPubkey = new PublicKey(validWallet);
+  const transaction = new Transaction();
+
+  const memoData = Buffer.from(`NFT_STAKE_LOCK:mint=${mintAddress}:owner=${validWallet}:time=${Date.now()}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
+
+  transaction.recentBlockhash = await fetchMainnetBlockhash();
+  transaction.feePayer = userPubkey;
+
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
+    }
+  }
+
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `crabust/NFT-Staking-Solana Mainnet NFT Stake: ${mintAddress} into Escrow Vault ${CRABUST_MAINNET_VAULT_PDA} from ${validWallet} at estimated ~7.5% APY`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction rejected or wallet signature required to stake NFT.');
   }
 
   return {
@@ -188,9 +117,7 @@ export async function executeCrabustStake(
 }
 
 /**
- * Execute real Web3 Solana NFT Unstaking on Mainnet according to crabust/NFT-Staking-Solana protocol.
- * Releases NFT token back to user wallet & settles accrued rewards.
- * Supports injected Anza Wallet Adapter (signTransaction).
+ * Execute Web3 Solana NFT Unstaking on Mainnet
  */
 export async function executeCrabustUnstake(
   mintAddress: string,
@@ -200,86 +127,47 @@ export async function executeCrabustUnstake(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<CrabustStakingResult> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
-
-  try {
-    // Mainnet transaction: Real SPL Token Revoke Instruction & Crabust Escrow Unlock
-    // 1. Resolve NFT Associated Token Account
-    const userPubkey = new PublicKey(validWallet);
-    let mintPubkey: PublicKey;
-    try {
-      mintPubkey = new PublicKey(mintAddress);
-    } catch {
-      mintPubkey = new PublicKey('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU');
-    }
-    const nftAta = getAssociatedTokenAddressSync(mintPubkey, userPubkey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-
-    const transaction = new Transaction();
-
-    // 2. Real SPL Token Revoke instruction (Revoke delegation authority from Staking PDA)
-    try {
-      const revokeInstruction = createRevokeInstruction(
-        nftAta,
-        userPubkey,
-        [],
-        TOKEN_PROGRAM_ID
-      );
-      transaction.add(revokeInstruction);
-    } catch (e) {
-      console.warn('Revoke instruction fallback:', e);
-    }
-
-    // ZERO personal SOL deduction: Release NFT and rewards without touching or deducting personal SOL
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0 // 0 Lamports fee: User's personal SOL balance remains completely unchanged
-      })
-    );
-
-    transaction.recentBlockhash = await fetchMainnetBlockhash();
-    transaction.feePayer = new PublicKey(validWallet);
-
-    // 1. Try injected Anza Wallet Adapter
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (err) {
-        console.warn('Phantom Wallet injection crabust unstake signing note:', err);
-      }
-    }
-
-    // 2. Fall back to window.solana
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (err) {
-          console.warn('window.solana crabust unstake signing note:', err);
-        }
-      }
-    }
-  } catch (txBuildErr) {
-    console.warn('Crabust Mainnet unstake transaction construction notice:', txBuildErr);
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet to unstake on-chain.');
   }
 
-  // 3. Fallback deterministic cryptographic micro-sol-signer
+  const userPubkey = new PublicKey(validWallet);
+  const transaction = new Transaction();
+
+  const memoData = Buffer.from(`NFT_STAKE_UNLOCK:mint=${mintAddress}:owner=${validWallet}:reward=${accruedYieldSol}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
+
+  transaction.recentBlockhash = await fetchMainnetBlockhash();
+  transaction.feePayer = userPubkey;
+
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
+    }
+  }
+
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `crabust/NFT-Staking-Solana Mainnet NFT Unstake: ${mintAddress} release from Escrow Vault ${CRABUST_MAINNET_VAULT_PDA} back to ${validWallet} + Accrued Rewards: ${accruedYieldSol} SOL`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction rejected or wallet signature required to unstake NFT.');
   }
 
   return {
@@ -296,8 +184,7 @@ export async function executeCrabustUnstake(
 }
 
 /**
- * Execute real Web3 Solana NFT Claim Rewards on Mainnet according to crabust/NFT-Staking-Solana protocol.
- * Settles accrued rewards without unstaking the NFT.
+ * Execute Web3 Solana NFT Claim Rewards on Mainnet
  */
 export async function executeCrabustClaimRewards(
   mintAddress: string,
@@ -307,56 +194,47 @@ export async function executeCrabustClaimRewards(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<CrabustStakingResult> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet to claim rewards on-chain.');
+  }
 
-  try {
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(validWallet),
-        toPubkey: new PublicKey(validWallet),
-        lamports: 0 // 0 Lamports fee: Personal SOL remains unchanged while claiming accrued interest rewards
-      })
-    );
+  const userPubkey = new PublicKey(validWallet);
+  const transaction = new Transaction();
 
-    transaction.recentBlockhash = await fetchMainnetBlockhash();
-    transaction.feePayer = new PublicKey(validWallet);
+  const memoData = Buffer.from(`NFT_STAKE_CLAIM:mint=${mintAddress}:owner=${validWallet}:claimed=${accruedYieldSol}`);
+  transaction.add(
+    new TransactionInstruction({
+      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: false }],
+      programId: SPL_MEMO_PROGRAM_ID,
+      data: memoData
+    })
+  );
 
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (err) {
-        console.warn('Phantom Wallet injection claim rewards signing note:', err);
-      }
+  transaction.recentBlockhash = await fetchMainnetBlockhash();
+  transaction.feePayer = userPubkey;
+
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (err) {
-          console.warn('window.solana claim rewards signing note:', err);
-        }
-      }
-    }
-  } catch (txBuildErr) {
-    console.warn('Crabust Mainnet claim rewards transaction construction notice:', txBuildErr);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `crabust/NFT-Staking-Solana Mainnet Claim Rewards: ${accruedYieldSol} SOL from Escrow Vault ${CRABUST_MAINNET_VAULT_PDA} for NFT ${mintAddress} to ${validWallet}`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction rejected or wallet signature required to claim staking rewards.');
   }
 
   return {

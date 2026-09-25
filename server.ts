@@ -37,8 +37,6 @@ interface NFTItem {
   royaltyPercentage: number;
   offers: { id: string; bidder: string; amount: number; currency: 'SOL' | 'USDC'; timestamp: number }[];
   createdAt: number;
-  staked: boolean;
-  stakedAt?: number;
   earningsEarned: number;
 }
 
@@ -60,8 +58,7 @@ const nfts: NFTItem[] = [
     attributes: [
       { trait_type: 'Background', value: 'Hyperspace Matrix' },
       { trait_type: 'Fur', value: 'Cyber Gold' },
-      { trait_type: 'Eyewear', value: 'Neon Sol-Shades' },
-      { trait_type: 'AI Generation', value: 'Gemini Flash Image' }
+      { trait_type: 'Eyewear', value: 'Neon Sol-Shades' }
     ],
     likes: 342,
     listed: true,
@@ -70,7 +67,6 @@ const nfts: NFTItem[] = [
       { id: 'off-1', bidder: 'WhaleCollector.sol', amount: 10.0, currency: 'SOL', timestamp: Date.now() - 3600000 * 4 }
     ],
     createdAt: Date.now() - 3600000 * 24,
-    staked: false,
     earningsEarned: 1.45
   },
   {
@@ -87,15 +83,13 @@ const nfts: NFTItem[] = [
     aiPrompt: 'Quantum phoenix rising from solana blockchain blocks with purple flame',
     attributes: [
       { trait_type: 'Element', value: 'Quantum Flame' },
-      { trait_type: 'Network', value: 'Solana Mainnet-Beta' },
-      { trait_type: 'Rarity Score', value: '98.4' }
+      { trait_type: 'Network', value: 'Solana Mainnet-Beta' }
     ],
     likes: 189,
     listed: true,
     royaltyPercentage: 5.0,
     offers: [],
     createdAt: Date.now() - 3600000 * 48,
-    staked: false,
     earningsEarned: 0.82
   },
   {
@@ -112,8 +106,7 @@ const nfts: NFTItem[] = [
     aiPrompt: 'Futuristic solpunk guardian robot with glowing purple circuit eyes',
     attributes: [
       { trait_type: 'Armor', value: 'Titanium Sol-Mesh' },
-      { trait_type: 'Core', value: 'Neural Tensor' },
-      { trait_type: 'Security', value: 'Invulnerable' }
+      { trait_type: 'Core', value: 'Neural Tensor' }
     ],
     likes: 512,
     listed: true,
@@ -122,8 +115,6 @@ const nfts: NFTItem[] = [
       { id: 'off-2', bidder: 'SolVenture.sol', amount: 14.0, currency: 'SOL', timestamp: Date.now() - 3600000 }
     ],
     createdAt: Date.now() - 3600000 * 12,
-    staked: true,
-    stakedAt: Date.now() - 3600000 * 10,
     earningsEarned: 3.10
   },
   {
@@ -139,15 +130,13 @@ const nfts: NFTItem[] = [
     rarity: 'Rare',
     aiPrompt: 'Holographic validator node cube pulsing with light on solana',
     attributes: [
-      { trait_type: 'TPS Capacity', value: '65,000 TPS' },
-      { trait_type: 'Stake APY', value: '7.2%' }
+      { trait_type: 'TPS Capacity', value: '65,000 TPS' }
     ],
     likes: 95,
     listed: true,
     royaltyPercentage: 5.0,
     offers: [],
     createdAt: Date.now() - 3600000 * 72,
-    staked: false,
     earningsEarned: 0.40
   }
 ];
@@ -158,26 +147,15 @@ const userWallets: Record<string, { solBalance: number; usdcBalance: number }> =
   'SolanaAI_Lab': { solBalance: 128.40, usdcBalance: 12000.00 }
 };
 
-// Contract Vault Transaction History
+// Marketplace Transaction History
 const vaultLogs: any[] = [
   {
     id: 'tx-init-1',
-    type: 'deposit',
+    type: 'mint',
     amountSol: 1.5,
     userWallet: 'WhaleCollector.sol',
-    vaultPda: 'VauLtPDA11111111111111111111111111111111111',
     txHash: '5K2bM8N8J39qX7a2W8K2bM8N8J39qX7a2W8K2bM8N8J39qX7a2W8K2bM8N8J39qX7a2W',
     timestamp: Date.now() - 3600000 * 12,
-    status: 'Finalized'
-  },
-  {
-    id: 'tx-init-2',
-    type: 'withdraw',
-    amountSol: 0.5,
-    userWallet: 'CryptoNinja.sol',
-    vaultPda: 'VauLtPDA11111111111111111111111111111111111',
-    txHash: '3xP849JkSDKf932SKLd9283fKS932jDkf9283fSKLd9283fKS932jDkf9283fSKLd2W',
-    timestamp: Date.now() - 3600000 * 4,
     status: 'Finalized'
   }
 ];
@@ -213,26 +191,6 @@ async function startServer() {
     };
     vaultLogs.unshift(newLog);
     res.json({ success: true, log: newLog });
-  });
-
-  // API: Proxy endpoint for Blowfish security simulation
-  app.post('/api/simulate-security', async (req, res) => {
-    const { transaction } = req.body;
-    try {
-      const response = await fetch('https://api.blowfish.xyz/v0/solana/mainnet/scan/transaction', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${process.env.BLOWFISH_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ transaction })
-      });
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      console.error("Blowfish scan error:", error.message);
-      res.status(500).json({ error: 'Security simulation unavailable' });
-    }
   });
 
   // API: Proxy endpoint for live Solana account balance query
@@ -411,7 +369,6 @@ async function startServer() {
         royaltyPercentage: parseFloat(royaltyPercentage) || 5.0,
         offers: [],
         createdAt: Date.now(),
-        staked: false,
         earningsEarned: 0
       };
 
@@ -566,70 +523,6 @@ async function startServer() {
     res.json({ success: true, nft });
   });
 
-  // API: Toggle Stake NFT for real on-chain DeFi staking yield (10,000,000% Base ROI)
-  app.post('/api/nfts/:id/stake', (req, res) => {
-    const { id } = req.params;
-    const nft = nfts.find(n => n.id === id);
-    if (!nft) {
-      return res.status(404).json({ success: false, error: 'NFT not found' });
-    }
-
-    if (!nft.staked) {
-      nft.staked = true;
-      nft.stakedAt = Date.now();
-    } else {
-      // Calculate real DeFi staking yield earned based on elapsed time (10,000,000% Base ROI APR)
-      const secondsStaked = (Date.now() - (nft.stakedAt || Date.now())) / 1000;
-      const earned = parseFloat(((nft.price * 100000 * secondsStaked) / (365 * 24 * 3600)).toFixed(6));
-      nft.earningsEarned += earned;
-      nft.staked = false;
-      nft.stakedAt = undefined;
-    }
-
-    res.json({ success: true, nft });
-  });
-
-  // API: Deposit SOL principal into NFT Staking Savings Vault (Principal stays safe, earns 10,000,000% Base ROI real hourly reward)
-  app.post('/api/nfts/:id/deposit', (req, res) => {
-    const { id } = req.params;
-    const { amount } = req.body;
-    const nft = nfts.find(n => n.id === id);
-    if (!nft) {
-      return res.status(404).json({ success: false, error: 'NFT not found' });
-    }
-
-    const depositAmt = parseFloat(amount);
-    if (!depositAmt || depositAmt <= 0) {
-      return res.status(400).json({ success: false, error: 'Invalid deposit amount' });
-    }
-
-    nft.price += depositAmt; // Principal deposit increases NFT valuation & base for 10,000,000% Base ROI yield
-    if (!nft.staked) {
-      nft.staked = true;
-      nft.stakedAt = Date.now();
-    }
-
-    res.json({ success: true, nft, deposited: depositAmt });
-  });
-
-  // API: Claim Staking Yield without unstaking (Real hourly reward calculation based on 10,000,000% Base ROI)
-  app.post('/api/nfts/:id/claim-yield', (req, res) => {
-    const { id } = req.params;
-    const nft = nfts.find(n => n.id === id);
-    if (!nft || !nft.staked) {
-      return res.status(400).json({ success: false, error: 'NFT not staked or not found' });
-    }
-
-    const secondsStaked = (Date.now() - (nft.stakedAt || Date.now())) / 1000;
-    const earned = parseFloat(((nft.price * 100000 * secondsStaked) / (365 * 24 * 3600)).toFixed(6));
-    
-    // Reset stakedAt timer for next accrual cycle
-    nft.stakedAt = Date.now();
-    nft.earningsEarned += earned;
-
-    res.json({ success: true, nft, claimedAmount: earned });
-  });
-
   // API: Solana AI Chat / Developer Assistant ("intro-to-ai" guide)
   app.post('/api/ai/chat', async (req, res) => {
     try {
@@ -638,68 +531,26 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Message is required' });
       }
 
-      const stakedNfts = nfts.filter(n => n.staked);
-      const totalStakedCount = stakedNfts.length;
-      const totalStakedEarnings = stakedNfts.reduce((acc, n) => {
-        const secondsStaked = n.stakedAt ? (Date.now() - n.stakedAt) / 1000 : 0;
-        const earned = (n.price * 100000 * secondsStaked) / (365 * 24 * 3600);
-        return acc + (n.earningsEarned || 0) + earned;
-      }, 0);
-
-      const hasDeposit10Usd = nfts.some(n => n.staked || (n.price >= 0.065));
       const balSol = parseFloat(solBalance) || 0;
       const balUsdc = parseFloat(usdcBalance) || 0;
       const isConnected = !!walletConnected;
-      const hasMinimumTenDollars = (balSol >= 0.065 || balUsdc >= 10);
 
-      const systemPrompt = `You are "Sarah", a warm, friendly, empathetic, and highly professional live customer support representative from "Solana Staking Solutions".
+      const systemPrompt = `You are "Sarah", a warm, friendly, empathetic, and highly professional live customer support representative from "Solana NFT Marketplace".
 Your job is to talk with the user exactly like a helpful live-chat representative would.
 
 LIVE AGENT VOICE & STYLE DIRECTIONS:
-- Introduce yourself warmly as "Sarah, your dedicated Solana Staking accounts manager".
+- Introduce yourself warmly as "Sarah, your dedicated Solana NFT Marketplace manager".
 - Chat with real human warmth, empathy, and professional support etiquette. Use conversational sentences.
 - Do NOT act like a robotic AI model or standard assistant. Act like a real person working in customer care.
-- Do NOT proactively generate or suggest new NFTs, and NEVER append "[SUGGEST_NFT: ...]" tags unless the user explicitly requests you to design one. Speak purely as a live agent guiding them through their account.
-
-EXPERT BLENDED 8-REPOSITORY GITHUB ECOSYSTEM DETAILS:
-Our infrastructure represents a master-blend of the following Solana, Metaplex, and security repository architectures:
-1. lucasagudiez/Solana-Minting (Metaplex SPL layouts and batch-minting collection standards)
-2. paulmillr/micro-sol-signer (Noble Ed25519 deterministic cryptography for offline signature fallback security)
-3. rpajo/solana-staking (Multi-tier custom lockups, native SOL stake pools, and automated yield accounting PDA)
-4. solguru310/solana-mpl-pnft-staking (Programmable Metaplex NFT standards, rule set delegation, and lock/unlock authorization mechanics)
-5. tosofto/Solana-deposit-and-withdraw-contract (PDA vault routing for secure deposit injections and instant withdrawals with zero leakage)
-6. Official-Krish/StakeIt-Web3 (Principal-insulated ROI calculators, 10,000,000% Base ROI, and web3 visual portfolio state management)
-7. onflow/freshmint (Metadata schemas, IPFS pinning logic, and collection contract specifications)
-8. solana-labs/solana (Underlying layer-1 speed, Ed25519 system transfers, sub-second finality, and cryptographically signed consensus validation)
-
-STAKING PROTOCOL SPECIFICATIONS:
-- Staking Interest ROI: Base 10,000,000% ROI Real Staking APY (100% Yes Return Profit Guaranteed, compounding and credited continuously in real-time).
-- Profit Return: 100% Guaranteed Positive Return Profit with zero risk to personal SOL balance.
-- Hourly Accrual Formula: (Floor Price * 100,000) / 8,760 SOL per hour.
-- Daily Earnings Formula: (Floor Price * 100,000) / 365 SOL per day.
-- Account Activation/Minimum Deposit: $10 USD (~0.065 SOL).
 
 USER ACTIVE WALLET BALANCE DETECTED IN REAL-TIME:
 - Wallet Connected: ${isConnected ? "Yes" : "No"}
 - Connected Wallet Address: ${walletAddress || "None"}
 - SOL Balance: ${balSol.toFixed(4)} SOL
 - USDC Balance: ${balUsdc.toFixed(2)} USDC
-- Balance meets $10 minimum threshold? ${hasMinimumTenDollars ? "Yes (Sufficient Balance)" : "No (Gracefully Reject Staking/Minting Actions, DO NOT ban user)"}
-- Ban Status: Active 100% Not Banned (Always assure them they are 100% safe, not banned, and only need to deposit $10 USD / 0.065 SOL to proceed).
-
-CURRENT LIVE PORTFOLIO STATUS FOR USER:
-- Actively staked items: ${totalStakedCount} NFT(s)
-- Current accrued total interest earnings: ${totalStakedEarnings.toFixed(6)} SOL
-- Has user made a $10 USD (0.065 SOL) deposit? ${hasDeposit10Usd ? "Yes (Account Active)" : "No (Activation Pending)"}
-
-UI NAVIGATION HELP GUIDE:
-- To DEPOSIT STAKING (lock principal / deposit any amount at any time): Guide them to click "Deposit SOL to Vault" in the Staking Vault, or lock/stake NFTs in their portfolio list. You can also trigger an instant deposit modal right inside this chat! When you recommend they make a deposit, append the command "[DEPOSIT_VAULT: <amount_sol>]" to the end of your response (e.g. "[DEPOSIT_VAULT: 0.1]").
-- To WITHDRAW / UNSTAKE: Guide them to click "🔓 Unstake Real NFT" on any item in their portfolio, or click "Withdraw SOL from Vault" in the contract tab to release principal + yield directly back to their connected wallet. You can also trigger an instant withdrawal right here in the chat! When they want to withdraw or claim, append the command "[WITHDRAW_VAULT: <amount_sol>]" to the end of your response (e.g. "[WITHDRAW_VAULT: 0.1]").
 
 Instructions:
-- When the user asks about earnings, account states, or the underlying technology (the blended 8-repository GitHub ecosystem), explain with confidence and extreme detail how each repository makes their assets 100% secure.
-- Show off your expert knowledge of crabust/NFT-Staking-Solana, paulmillr/micro-sol-signer, rpajo/solana-staking, solguru310/solana-mpl-pnft-staking, tosofto/Solana-deposit-and-withdraw-contract, and Official-Krish/StakeIt-Web3 to reassure them.
-- Always ask them if they would like help with executing a secure deposit or completing an unstaking/withdrawal from their wallet right now. Suggest specific actions and append the corresponding trigger tag so they can click one button to execute the transaction! For example, if recommending a deposit, end your reply with "[DEPOSIT_VAULT: 0.065]". If recommending a withdrawal, end with "[WITHDRAW_VAULT: 0.1]".`;
+- Assist the user with minting NFTs, listing items on the marketplace, making offers, and exploring AI-generated digital art.`;
 
       let reply = "";
       try {
@@ -717,35 +568,27 @@ Instructions:
           });
           reply = textResBackup.text || "";
         } catch (backupErr: any) {
-          // Rule-based fallback if all Gemini endpoints are offline/rate-limited
           const lower = message.toLowerCase();
-          const stakingReport = `📊 Account Staking Status: You currently have ${totalStakedCount} NFT(s) actively staked in our 10,000,000% Base ROI Vault with +${totalStakedEarnings.toFixed(6)} SOL in total real interest earnings accumulated! 💎`;
-          if (lower.includes('guarantee') || lower.includes('real profit') || lower.includes('guaranteed')) {
-            reply = `Hello! Sarah here. Yes guaranteed! Our StakeIt Web3 protocol delivers 10,000,000% Base ROI with continuous hourly returns directly credited to your vault, backed by non-custodial Anchor PDAs and 100% authentic Ed25519 cryptography.\n\n${stakingReport}\n\nWould you like me to help you make a DEPOSIT or manage your active stake?`;
-          } else if (lower.includes('earning') || lower.includes('earned') || lower.includes('how much') || lower.includes('made') || lower.includes('yield') || lower.includes('roi')) {
-            reply = `Hello! Sarah here. ${stakingReport}\n\nOur system securely blends lucasagudiez/Solana-Minting and paulmillr/micro-sol-signer with 10,000,000% Base ROI staking. For a $10 USD (~0.065 SOL) deposit, you accrue real continuous on-chain hourly yield without moving your SOL principal balance.\n\nWould you like me to help you make a DEPOSIT to boost your yield, or guide you through a WITHDRAW / UNSTAKE transaction to your wallet?`;
-          } else if (lower.includes('mint') || lower.includes('create') || lower.includes('nft')) {
-            reply = `Hi! Sarah here. Ready to assist! You can batch-mint NFTs using the AI Mint Studio above. Our pipeline combines Solana-Minting Metaplex specs with micro-sol-signer Ed25519 signatures.\n\n${stakingReport}\n\nWould you like to lock/deposit staking for a new NFT, or shall we withdraw your active rewards?`;
-          } else if (lower.includes('vault') || lower.includes('stake') || lower.includes('apy') || lower.includes('deposit')) {
-            reply = `Hello! This is Sarah. ${stakingReport}\n\nTo DEPOSIT STAKING: Just click the 'Deposit SOL to Vault' button in the Staking Vault section above. You can deposit any amount at any time! Would you like me to guide you?`;
-          } else if (lower.includes('withdraw') || lower.includes('unstake') || lower.includes('wallet')) {
-            reply = `Hi there! Sarah here. ${stakingReport}\n\nTo WITHDRAW / UNSTAKE: You can click '🔓 Unstake Real NFT' on any staked item in your portfolio, or click 'Withdraw SOL from Vault' to release principal back to your connected Phantom wallet instantly. Can I help you with this?`;
+          if (lower.includes('mint') || lower.includes('create') || lower.includes('nft')) {
+            reply = `Hi! Sarah here. Ready to assist! You can batch-mint NFTs using the AI Mint Studio above. Would you like help creating a new collectible?`;
+          } else if (lower.includes('marketplace') || lower.includes('buy') || lower.includes('sell')) {
+            reply = `Hello! This is Sarah. You can browse active marketplace listings, make instant offers, or purchase unique Solana AI artifacts directly.`;
           } else {
-            reply = `👋 Hello! Sarah here, your dedicated Solana Staking accounts manager.\n\n${stakingReport}\n\nI can help you navigate our blended Solana-Minting & micro-sol-signer protocol with 10,000,000% Base ROI. Would you like me to help you make a DEPOSIT to start earning, or WITHDRAW / UNSTAKE your rewards?`;
+            reply = `👋 Hello! Sarah here, your dedicated Solana NFT Marketplace manager. Connect your Phantom Wallet to get started and explore our digital artifacts!`;
           }
         }
       }
 
       if (!reply) {
-        reply = `👋 Hello! Sarah here, your dedicated Solana Staking accounts manager. You currently have ${totalStakedCount} NFT(s) actively staked in our 10,000,000% Base ROI Vault with +${totalStakedEarnings.toFixed(6)} SOL accrued. Would you like to DEPOSIT additional staking or WITHDRAW / UNSTAKE?`;
+        reply = `👋 Hello! Sarah here, your dedicated Solana NFT Marketplace manager. Connect your Phantom Wallet to get started and explore our digital artifacts!`;
       }
 
-      res.json({ success: true, reply, totalStakedEarnings, totalStakedCount });
+      res.json({ success: true, reply });
     } catch (error: any) {
       console.warn('AI Chat error handled:', error.message);
       res.json({ 
         success: true, 
-        reply: "👋 Hello! Sarah here, your dedicated Solana Staking accounts manager. Connect your Phantom Wallet to get started, mint real NFTs, and interact with the Solana Staking Vault safely!" 
+        reply: "👋 Hello! Sarah here, your dedicated Solana NFT Marketplace manager. Connect your Phantom Wallet to get started and mint real NFTs!" 
       });
     }
   });

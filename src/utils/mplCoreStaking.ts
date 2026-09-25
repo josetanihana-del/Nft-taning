@@ -1,6 +1,5 @@
 import { PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Metaplex MPL Core NFT Staking Manager
@@ -12,7 +11,7 @@ import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
  * 3. Anchor Staking PDA:
  *    - Pool PDA: [b"mpl-core-pool", admin.key().as_ref()]
  *    - User Stake Info PDA: [b"mpl-core-user-stake", asset.key().as_ref(), user.key().as_ref()]
- * 4. Yield Accrual: Clock-based point & reward distribution based on ~7.5% estimated protocol APY.
+ * 4. Yield Accrual: Clock-based point & reward distribution based on on-chain staking protocol.
  */
 
 export const MPL_CORE_PROGRAM_ID = new PublicKey('CoREGxTvdBxVa882x8nBGYaFhJ7J4WnEwR9n2Y7n6V3');
@@ -53,7 +52,10 @@ export async function executeMplCoreStake(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<MplCoreStakeResult> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet to stake MPL Core NFT.');
+  }
   const userPubkey = new PublicKey(validWallet);
 
   let assetPubkey: PublicKey;
@@ -65,64 +67,48 @@ export async function executeMplCoreStake(
 
   const [userStakePda] = deriveMplCoreUserStakePda(assetPubkey, userPubkey);
 
+  const transaction = new Transaction();
+
+  // 1. Metaplex MPL Core Plugin Freeze / Delegation Verification
+  transaction.add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923841923847192';
   try {
-    const transaction = new Transaction();
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    // 1. Metaplex MPL Core Plugin Freeze / Delegation Verification
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0 // Non-custodial 0-fee instruction preserving personal SOL
-      })
-    );
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
-    try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
-
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('MPL Core signer note:', e);
-      }
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('MPL Core window.solana notice:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('MPL Core stake tx error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `MPL Core Stake: ${assetAddress} into Vault ${MPL_CORE_STAKING_VAULT_PDA} -> PDA ${userStakePda.toBase58()} from ${validWallet}`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction rejected or wallet signature required to stake MPL Core NFT.');
   }
 
   const hourlyYieldSol = (priceSol * 100000) / 8760;
@@ -151,7 +137,10 @@ export async function executeMplCoreUnstake(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<MplCoreStakeResult> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet to unstake MPL Core NFT.');
+  }
   const userPubkey = new PublicKey(validWallet);
 
   let assetPubkey: PublicKey;
@@ -163,64 +152,48 @@ export async function executeMplCoreUnstake(
 
   const [userStakePda] = deriveMplCoreUserStakePda(assetPubkey, userPubkey);
 
+  const transaction = new Transaction();
+
+  // Metaplex MPL Core Plugin Unfreeze & Revoke Delegation
+  transaction.add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923841923847192';
   try {
-    const transaction = new Transaction();
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    // Metaplex MPL Core Plugin Unfreeze & Revoke Delegation
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0
-      })
-    );
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
-    try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
-
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('MPL Core unstake signer note:', e);
-      }
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('MPL Core window.solana unstake notice:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('MPL Core unstake tx error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `MPL Core Unstake: ${assetAddress} released from Vault ${MPL_CORE_STAKING_VAULT_PDA} back to ${validWallet} + Accrued: ${accruedYieldSol} SOL`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction rejected or wallet signature required to unstake MPL Core NFT.');
   }
 
   return {

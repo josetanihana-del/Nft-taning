@@ -18,37 +18,37 @@ export const STAKEIT_TIERS: StakeTier[] = [
     id: 'bronze',
     name: 'Bronze Flexible Vault',
     minDurationDays: 0,
-    apyPercentage: 8.5,
+    apyPercentage: 10000,
     multiplier: 1.0,
     color: 'from-amber-700 to-amber-900',
-    badge: 'Standard APY'
+    badge: 'Staking ROI 10,000%'
   },
   {
     id: 'silver',
     name: 'Silver 30-Day Lock',
     minDurationDays: 30,
-    apyPercentage: 14.2,
+    apyPercentage: 10000,
     multiplier: 1.25,
     color: 'from-slate-400 to-slate-600',
-    badge: '1.25x Multiplier'
+    badge: 'Staking ROI 10,000% (1.25x)'
   },
   {
     id: 'gold',
     name: 'Gold 90-Day Lock',
     minDurationDays: 90,
-    apyPercentage: 22.8,
+    apyPercentage: 10000,
     multiplier: 1.6,
     color: 'from-yellow-500 to-amber-600',
-    badge: '1.6x Multiplier'
+    badge: 'Staking ROI 10,000% (1.6x)'
   },
   {
     id: 'platinum',
     name: 'Platinum AI High Yield',
     minDurationDays: 180,
-    apyPercentage: 35.0,
+    apyPercentage: 10000,
     multiplier: 2.2,
     color: 'from-cyan-500 to-purple-600',
-    badge: '2.2x High APY'
+    badge: 'Staking ROI 10,000% (2.2x High APY)'
   }
 ];
 

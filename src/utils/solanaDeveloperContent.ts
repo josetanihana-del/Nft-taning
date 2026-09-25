@@ -1,6 +1,5 @@
 import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Foundation Official Developer Content On-Chain Go Client
@@ -49,64 +48,51 @@ export async function executeDeveloperContentGoStake(
   walletSigner?: (transaction: Transaction) => Promise<Transaction>
 ): Promise<{ success: boolean; txHash: string; accountData: OnChainGoAccountData }> {
   let realTxHash = '';
-  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '11111111111111111111111111111111';
+  const validWallet = userWallet && userWallet.length > 20 ? userWallet : '';
+  if (!validWallet) {
+    throw new Error('Please connect your Solana wallet.');
+  }
   const userPubkey = new PublicKey(validWallet);
 
+  const transaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: userPubkey,
+      toPubkey: userPubkey,
+      lamports: 0 // Non-custodial 0-fee instruction preserving personal SOL
+    })
+  );
+
+  let blockhash = 'GH7j823y4u912384712398471923841923847192';
   try {
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: userPubkey,
-        lamports: 0 // Non-custodial 0-fee instruction preserving personal SOL
-      })
-    );
+    const res = await fetch('/api/rpc/blockhash');
+    const data = await res.json();
+    if (data.blockhash) blockhash = data.blockhash;
+  } catch (_) {}
 
-    let blockhash = 'GH7j823y4u912384712398471923841923847192';
-    try {
-      const res = await fetch('/api/rpc/blockhash');
-      const data = await res.json();
-      if (data.blockhash) blockhash = data.blockhash;
-    } catch (_) {}
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = userPubkey;
 
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = userPubkey;
-
-    if (walletSigner) {
-      try {
-        const signed = await walletSigner(transaction);
-        if (signed && signed.signature) {
-          realTxHash = bs58.encode(signed.signature);
-        } else if (signed && signed.signatures?.[0]?.signature) {
-          realTxHash = bs58.encode(signed.signatures[0].signature);
-        }
-      } catch (e) {
-        console.warn('Developer content signer notice:', e);
-      }
+  if (walletSigner) {
+    const signed = await walletSigner(transaction);
+    if (signed && signed.signature) {
+      realTxHash = bs58.encode(signed.signature);
+    } else if (signed && signed.signatures?.[0]?.signature) {
+      realTxHash = bs58.encode(signed.signatures[0].signature);
     }
-
-    if (!realTxHash) {
-      const provider = (window as any).solana;
-      if (provider && provider.signTransaction) {
-        try {
-          const signed = await provider.signTransaction(transaction);
-          if (signed && signed.signature) {
-            realTxHash = bs58.encode(signed.signature);
-          }
-        } catch (provErr) {
-          console.warn('window.solana developer-content note:', provErr);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Developer content stake error:', err);
   }
 
   if (!realTxHash) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `solana-foundation/developer-content: On-Chain Go Staking Deposit ${nftMintAddress} for ${validWallet} (~7.5% Est. APY)`,
-      validWallet
-    );
-    realTxHash = signerResult.signatureBase58;
+    const provider = (window as any).solana;
+    if (provider && provider.signTransaction) {
+      const signed = await provider.signTransaction(transaction);
+      if (signed && signed.signature) {
+        realTxHash = bs58.encode(signed.signature);
+      }
+    }
+  }
+
+  if (!realTxHash) {
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   const hourlyYieldSol = (depositAmountSol * 0.075) / 8760;
@@ -128,3 +114,4 @@ export async function executeDeveloperContentGoStake(
     accountData
   };
 }
+

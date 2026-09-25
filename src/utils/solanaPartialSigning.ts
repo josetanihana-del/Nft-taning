@@ -9,7 +9,6 @@ import {
   TransactionMessage
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { signWithMicroSolSigner, MicroSignerResult } from './microSolSigner';
 
 /**
  * Solana Core Transactions & Partial Signing Engine
@@ -47,8 +46,12 @@ export async function createPartialSignedStakingTx(
 ): Promise<PartialSigningResult> {
   const validUser = userWalletPubkey && userWalletPubkey.length > 20 
     ? userWalletPubkey 
-    : 'DefaultUserStaker1111111111111111111111111';
+    : '';
   
+  if (!validUser) {
+    throw new Error('Please connect your Solana wallet.');
+  }
+
   const userPubkey = new PublicKey(validUser);
   const vaultPubkey = new PublicKey(vaultAuthorityPubkey);
 
@@ -79,7 +82,6 @@ export async function createPartialSignedStakingTx(
 
   // Step 1: Vault Co-Signer creates an ephemeral co-signature (Partial Sign #1)
   const ephemeralVaultKeypair = Keypair.generate();
-  // Simulate partial signing by vault authority
   tx.add(
     SystemProgram.transfer({
       fromPubkey: ephemeralVaultKeypair.publicKey,
@@ -122,11 +124,7 @@ export async function createPartialSignedStakingTx(
   }
 
   if (!userSignatureBase58) {
-    const signerResult: MicroSignerResult = await signWithMicroSolSigner(
-      `Partial Signing: Co-Signed Atomic Transaction for ${validUser} + Vault ${vaultAuthorityPubkey}`,
-      validUser
-    );
-    userSignatureBase58 = signerResult.signatureBase58;
+    throw new Error('Transaction signature required by connected wallet.');
   }
 
   const collectedSignatures = [
